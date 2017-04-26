@@ -14,14 +14,40 @@ type Tabs struct {
 	Children vecty.MarkupOrComponentOrHTML
 	Panels   []*Panel
 	Bar      *Bar
+	active   string
 }
 
 func (t *Tabs) OnActive(id string) {
-	for i := 0; i < len(t.Panels); i++ {
-		if t.Panels[i].ID == id {
-			t.Panels[i].Activate()
+	t.deactivate(t.active)
+	t.activate(id)
+	vecty.Rerender(t)
+}
+func (t *Tabs) deactivate(id string) {
+	if id != "" {
+		for i := 0; i < len(t.Panels); i++ {
+			if t.Panels[i].ID == id {
+				t.Panels[i].IsActive = false
+				if t.active == id {
+					t.active = ""
+				}
+				t.Bar.Links[i].IsActive = false
+			}
 		}
 	}
+
+}
+
+func (t *Tabs) activate(id string) {
+	if id != "" {
+		for i := 0; i < len(t.Panels); i++ {
+			if t.Panels[i].ID == id {
+				t.Panels[i].IsActive = true
+				t.Bar.Links[i].IsActive = true
+				t.active = id
+			}
+		}
+	}
+
 }
 
 func (t *Tabs) Render() *vecty.HTML {
@@ -43,13 +69,18 @@ func (t *Tabs) Render() *vecty.HTML {
 			}
 			if t.Panels[i].IsActive {
 				l.IsActive = true
+				t.active = t.Panels[i].ID
 			}
 			t.Bar.Links = append(t.Bar.Links, l)
 		}
 	}
+	var p vecty.List
+	for i := 0; i < len(t.Panels); i++ {
+		p = append(p, t.Panels[i])
+	}
 	return elem.Div(
 		c,
-		vecty.List{t.Bar, vecty.List{t.Panels}},
+		vecty.List{t.Bar, p},
 	)
 }
 
@@ -96,9 +127,12 @@ func (b *Bar) Render() *vecty.HTML {
 			b.Links[i].OnActive = b.ActiveTab
 		}
 	}
+	var l vecty.List
+	for i := 0; i < len(b.Links); i++ {
+		l = append(l, b.Links[i])
+	}
 	return elem.Div(
-		prop.Class("mdl-tabs__tab-bar"),
-		vecty.List{b.Links},
+		prop.Class("mdl-tabs__tab-bar"), l,
 	)
 }
 
@@ -126,6 +160,5 @@ func (p *Panel) Render() *vecty.HTML {
 func (p *Panel) Activate() {
 	if !p.IsActive {
 		p.IsActive = true
-		vecty.Rerender(p)
 	}
 }
