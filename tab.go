@@ -114,7 +114,7 @@ func (l *Link) Render() *vecty.HTML {
 		c["is-active"] = true
 	}
 	return elem.Anchor(
-		prop.Href(l.ID),
+		prop.Href("#"+l.ID),
 		prop.ID(l.ID+"-bar"),
 		c,
 		vecty.Text(l.Name),
