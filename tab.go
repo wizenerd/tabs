@@ -1,11 +1,22 @@
 package tabs
 
 import (
+	"context"
+
 	"github.com/gopherjs/vecty"
 	"github.com/gopherjs/vecty/elem"
 	"github.com/gopherjs/vecty/event"
 	"github.com/gopherjs/vecty/prop"
+	"honnef.co/go/js/dom"
 )
+
+var tabUpdates chan string
+var doc dom.Document
+
+func init() {
+	tabUpdates = make(chan string, 100)
+	doc = dom.GetWindow().Document()
+}
 
 type Tabs struct {
 	vecty.Core
@@ -17,37 +28,43 @@ type Tabs struct {
 	active   string
 }
 
-func (t *Tabs) OnActive(id string) {
-	t.deactivate(t.active)
-	t.activate(id)
-	vecty.Rerender(t)
+func New(ctx context.Context) *Tabs {
+	t := &Tabs{}
+	return t.watch(ctx)
 }
-func (t *Tabs) deactivate(id string) {
-	if id != "" {
-		for i := 0; i < len(t.Panels); i++ {
-			if t.Panels[i].ID == id {
-				t.Panels[i].IsActive = false
-				if t.active == id {
-					t.active = ""
+
+func switchState(id string, active bool) {
+	toActive(id+"-bar", active)
+	toActive(id, active)
+}
+
+func toActive(id string, state bool) {
+	e := doc.GetElementByID(id)
+	a := "is-active"
+	if state {
+		e.Class().Add(a)
+	} else {
+		e.Class().Remove(a)
+	}
+}
+
+func (t *Tabs) watch(ctx context.Context) *Tabs {
+	go func() {
+	done:
+		for {
+			select {
+			case id := <-tabUpdates:
+				if id != t.active {
+					switchState(t.active, false)
+					switchState(id, true)
+					t.active = id
 				}
-				t.Bar.Links[i].IsActive = false
+			case <-ctx.Done():
+				break done
 			}
 		}
-	}
-
-}
-
-func (t *Tabs) activate(id string) {
-	if id != "" {
-		for i := 0; i < len(t.Panels); i++ {
-			if t.Panels[i].ID == id {
-				t.Panels[i].IsActive = true
-				t.Bar.Links[i].IsActive = true
-				t.active = id
-			}
-		}
-	}
-
+	}()
+	return t
 }
 
 func (t *Tabs) Render() *vecty.HTML {
@@ -59,9 +76,8 @@ func (t *Tabs) Render() *vecty.HTML {
 			c[" mdl-js-ripple-effect"] = true
 		}
 	}
-	if t.Bar == nil {
+	if t.Bar == nil || len(t.Bar.Links) == 0 {
 		t.Bar = &Bar{}
-		t.Bar.ActiveTab = t.OnActive
 		for i := 0; i < len(t.Panels); i++ {
 			l := &Link{
 				ID:   t.Panels[i].ID,
@@ -89,7 +105,6 @@ type Link struct {
 	ID       string
 	Name     string
 	IsActive bool
-	OnActive func(id string)
 }
 
 func (l *Link) Render() *vecty.HTML {
@@ -100,39 +115,32 @@ func (l *Link) Render() *vecty.HTML {
 	}
 	return elem.Anchor(
 		prop.Href(l.ID),
+		prop.ID(l.ID+"-bar"),
 		c,
 		vecty.Text(l.Name),
 		event.Click(func(e *vecty.Event) {
-			if !l.IsActive {
-				l.IsActive = true
-				if l.OnActive != nil {
-					l.OnActive(l.ID)
-				}
-				vecty.Rerender(l)
-			}
+			go func() {
+				tabUpdates <- l.ID
+			}()
 		}),
 	)
 }
 
 type Bar struct {
 	vecty.Core
-	Links     []*Link
-	ActiveTab func(string)
-	Children  vecty.MarkupOrComponentOrHTML
+	Links    []*Link
+	Children vecty.MarkupOrComponentOrHTML
 }
 
 func (b *Bar) Render() *vecty.HTML {
-	if b.ActiveTab != nil {
-		for i := 0; i < len(b.Links); i++ {
-			b.Links[i].OnActive = b.ActiveTab
-		}
-	}
+
 	var l vecty.List
 	for i := 0; i < len(b.Links); i++ {
 		l = append(l, b.Links[i])
 	}
 	return elem.Div(
 		prop.Class("mdl-tabs__tab-bar"), l,
+		b.Children,
 	)
 }
 
