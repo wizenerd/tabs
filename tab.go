@@ -26,10 +26,12 @@ type Tabs struct {
 	Panels   []*Panel
 	Bar      *Bar
 	active   string
+	cancel   func()
 }
 
-func New(ctx context.Context) *Tabs {
-	t := &Tabs{}
+func New() *Tabs {
+	ctx, cancel := context.WithCancel(context.Background())
+	t := &Tabs{cancel: cancel}
 	return t.watch(ctx)
 }
 
@@ -46,6 +48,10 @@ func toActive(id string, state bool) {
 	} else {
 		e.Class().Remove(a)
 	}
+}
+
+func (t *Tabs) Unmount() {
+	t.cancel()
 }
 
 func (t *Tabs) watch(ctx context.Context) *Tabs {
